@@ -13,14 +13,15 @@ Environment variables:
 
 from __future__ import annotations
 
-import json
-
-import fire
+import typer
 
 from r2e_docker.config import DockerBuildConfig, RepoName
 from r2e_docker.builder import build_base_image, build_commit_image, push_image
 
+app = typer.Typer(help="Build and push Docker images for R2E repos.")
 
+
+@app.command("build_base")
 def build_base(
     repo: str,
     reference_commit: str,
@@ -51,11 +52,13 @@ def build_base(
     return build_base_image(config, reference_commit)
 
 
+@app.command("build_all_bases")
 def build_all_bases(
     reference_commits: str,
     registry: str | None = None,
     rebuild: bool = False,
-) -> dict[str, str]:
+    max_workers: int = 4,
+) -> None:
     """Build base images for multiple repos.
 
     Args:
@@ -63,29 +66,18 @@ def build_all_bases(
             e.g. {"sympy": "abc123", "pandas": "def456"}.
         registry: Docker registry prefix.
         rebuild: Force rebuild.
-
-    Returns:
-        Dict mapping repo name to built image name.
     """
-    with open(reference_commits) as f:
-        commits: dict[str, str] = json.load(f)
+    from r2e_docker.batch import build_all_bases as _build_all_bases
 
-    results: dict[str, str] = {}
-    for repo_name, commit_hash in commits.items():
-        try:
-            img = build_base(
-                repo=repo_name,
-                reference_commit=commit_hash,
-                registry=registry,
-                rebuild=rebuild,
-            )
-            results[repo_name] = img
-        except Exception as e:
-            print(f"Failed to build base for {repo_name}: {e}")
-            results[repo_name] = f"FAILED: {e}"
-    return results
+    _build_all_bases(
+        reference_commits=reference_commits,
+        registry=registry,
+        rebuild=rebuild,
+        max_workers=max_workers,
+    )
 
 
+@app.command("build_commit")
 def build_commit(
     repo: str,
     commit: str,
@@ -124,18 +116,38 @@ def build_commit(
     return build_commit_image(config, commit, context_dir)
 
 
-def main():
-    from r2e_docker.batch import build_from_dataset
+@app.command("build_from_dataset")
+def build_from_dataset(
+    dataset: str = "R2E-Gym/R2E-Gym-Lite",
+    split: str = "train",
+    registry: str | None = None,
+    max_workers: int = 4,
+    rebuild: bool = False,
+    push: bool = False,
+    base_only: bool = False,
+    limit: int | None = None,
+) -> None:
+    from r2e_docker.batch import build_from_dataset as _build_from_dataset
 
-    fire.Fire(
-        {
-            "build_base": build_base,
-            "build_all_bases": build_all_bases,
-            "build_commit": build_commit,
-            "build_from_dataset": build_from_dataset,
-            "push": push_image,
-        }
+    _build_from_dataset(
+        dataset=dataset,
+        split=split,
+        registry=registry,
+        max_workers=max_workers,
+        rebuild=rebuild,
+        push=push,
+        base_only=base_only,
+        limit=limit,
     )
+
+
+@app.command("push")
+def push(image_name: str) -> bool:
+    return push_image(image_name)
+
+
+def main() -> None:
+    app()
 
 
 if __name__ == "__main__":

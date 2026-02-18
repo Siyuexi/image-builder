@@ -25,7 +25,7 @@ check_orange() {
 
 try_install_python37() {
     echo "Attempting installation with Python 3.7..."
-    uv venv --python 3.7 --python-preference only-managed
+    uv venv --clear --python 3.7 --python-preference only-managed || return 1
     source .venv/bin/activate
     uv pip install --upgrade "setuptools<60" "numpy<1.18" wheel "cython<0.30" pytest "PyQt5>=5.12,!=5.15.1" "PyQtWebEngine>=5.12"
     uv pip install -r requirements-core.txt
@@ -42,7 +42,7 @@ try_install_python37() {
 
 try_install_python38() {
     echo "Attempting installation with Python 3.8..."
-    uv venv --python 3.8 --python-preference only-managed
+    uv venv --clear --python 3.8 --python-preference only-managed || return 1
     source .venv/bin/activate
     uv pip install --upgrade setuptools numpy wheel "cython<0.30" pytest "PyQt5>=5.12,!=5.15.1" "PyQtWebEngine>=5.12"
     uv pip install -r requirements-core.txt
@@ -58,7 +58,7 @@ try_install_python38() {
 
 try_install_python310() {
     echo "Attempting installation with Python 3.10..."
-    uv venv --python 3.10 --python-preference only-managed
+    uv venv --clear --python 3.10 --python-preference only-managed || return 1
     source .venv/bin/activate
     uv pip install --upgrade setuptools numpy wheel cython pytest "PyQt5>=5.12,!=5.15.1" "PyQtWebEngine>=5.12"
     uv pip install -r requirements-core.txt

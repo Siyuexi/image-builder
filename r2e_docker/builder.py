@@ -36,7 +36,9 @@ def build_base_image(config: DockerBuildConfig, reference_commit: str) -> str:
             print(f"Base image {base_image_name} already exists, skipping build")
             return base_image_name
 
-    print(f"Building base image {base_image_name} at reference commit {reference_commit}")
+    print(
+        f"Building base image {base_image_name} at reference commit {reference_commit}"
+    )
 
     base_dockerfile = config.base_dockerfile
     install_file = config.install_script
@@ -67,14 +69,15 @@ def build_base_image(config: DockerBuildConfig, reference_commit: str) -> str:
             shutil.copy(src_path, tmpdir / extra_file)
 
         res = run_subprocess_shell(
-            f'docker build -t {base_image_name} '
+            f"docker build -t {base_image_name} "
             f'--build-arg BASE_COMMIT="{reference_commit}" .',
             cwd=tmpdir,
+            capture_output=False,
             timeout=config.base_build_timeout,
         )
 
         if res.returncode != 0:
-            print(f"Failed to build base image: {res.stderr}")
+            print("Failed to build base image. See docker build logs above.")
             raise RuntimeError(f"Base image build failed for {config.repo_name.value}")
 
     print(f"Successfully built base image {base_image_name}")
@@ -101,8 +104,8 @@ def generate_commit_dockerfile(config: DockerBuildConfig) -> str:
         "ARG OLD_COMMIT",
         "WORKDIR /testbed",
         "",
-        "# Checkout the target commit (all refs already available from git clone in base)",
-        "RUN git checkout ${OLD_COMMIT}",
+        "# Base image already contains full git history; just checkout target commit locally",
+        "RUN git reset --hard && git clean -fd && git checkout -f ${OLD_COMMIT}",
     ]
 
     # Some repos need submodule update after checkout
@@ -110,20 +113,24 @@ def generate_commit_dockerfile(config: DockerBuildConfig) -> str:
         lines.append("RUN git submodule update --init --recursive")
 
     # Re-run install in quick mode (reuses existing .venv, only reinstalls editable)
-    lines.extend([
-        "",
-        "COPY install.sh /testbed/install.sh",
-        "RUN --mount=type=cache,target=/root/.cache/uv \\",
-        "    --mount=type=cache,target=/root/.cache/pip \\",
-        "    bash install.sh --quick",
-    ])
+    lines.extend(
+        [
+            "",
+            "COPY install.sh /testbed/install.sh",
+            "RUN --mount=type=cache,target=/root/.cache/uv \\",
+            "    --mount=type=cache,target=/root/.cache/pip \\",
+            "    bash install.sh --quick",
+        ]
+    )
 
-    lines.extend([
-        "",
-        "COPY run_tests.sh /testbed/run_tests.sh",
-        "COPY r2e_tests /r2e_tests",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "COPY run_tests.sh /testbed/run_tests.sh",
+            "COPY r2e_tests /r2e_tests",
+            "",
+        ]
+    )
 
     return "\n".join(lines)
 
@@ -166,17 +173,16 @@ def build_commit_image(
     print(f"Building thin commit image for {old_commit_hash}")
     memory_bytes = _parse_memory_limit(config.memory_limit)
     res = run_subprocess_shell(
-        f'docker build --memory {memory_bytes} '
-        f'-t {commit_image} . '
+        f"docker build --memory {memory_bytes} "
+        f"-t {commit_image} . "
         f'--build-arg OLD_COMMIT="{old_commit_hash}"',
-        capture_output=True,
+        capture_output=False,
         cwd=build_context_dir,
         timeout=config.commit_build_timeout,
     )
 
     if res.returncode != 0:
-        print(f"Failed to build commit image: {res.stdout}")
-        print(res.stderr)
+        print("Failed to build commit image. See docker build logs above.")
         return None
 
     if config.push:

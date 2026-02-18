@@ -1,6 +1,8 @@
-FROM ubuntu:22.04
+FROM aibrix-docker-mirror-cn-beijing.cr.volces.com/library/ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+RUN sed -i 's@http://\(archive\|security\).ubuntu.com/ubuntu/@http://mirrors.aliyun.com/ubuntu/@g; s@https://\(archive\|security\).ubuntu.com/ubuntu/@http://mirrors.aliyun.com/ubuntu/@g' /etc/apt/sources.list
 
 # System dependencies (single layer with cleanup)
 RUN apt-get update -y && apt-get upgrade -y \
@@ -13,15 +15,27 @@ RUN apt-get update -y && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv (pinned version)
-RUN curl -LsSf https://astral.sh/uv/0.6.0/install.sh | sh
+RUN curl -LsSf https://astral.sh/uv/0.10.4/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
-RUN git clone --filter=blob:none https://github.com/tornadoweb/tornado.git testbed
+ARG BASE_COMMIT
+RUN git config --global http.version HTTP/1.1 \
+    && git config --global http.lowSpeedLimit 1000 \
+    && git config --global http.lowSpeedTime 60
+RUN set -eux; \
+    for i in 1 2 3; do \
+        rm -rf testbed; \
+        ( \
+            git clone --no-single-branch https://github.com/tornadoweb/tornado.git testbed; \
+            cd testbed; \
+            git checkout -f "${BASE_COMMIT}" \
+        ) && break; \
+        echo "git fetch base commit failed (attempt $i), retrying..."; \
+        sleep $((i * 10)); \
+    done; \
+    test -d testbed/.git
 
 WORKDIR /testbed
-
-ARG BASE_COMMIT
-RUN git checkout ${BASE_COMMIT}
 
 COPY install.sh /testbed/install.sh
 RUN --mount=type=cache,target=/root/.cache/uv \

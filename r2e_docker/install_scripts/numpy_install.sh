@@ -23,7 +23,7 @@ check_numpy() {
 
 try_install_python37() {
     echo "Attempting installation with Python 3.7..."
-    uv venv --python 3.7 --python-preference only-managed
+    uv venv --clear --python 3.7 --python-preference only-managed || return 1
     source .venv/bin/activate
     uv pip install "setuptools<=59.8.0" "cython<0.30" pytest pytest-env hypothesis nose
     .venv/bin/python setup.py build_ext --inplace
@@ -32,7 +32,7 @@ try_install_python37() {
 
 try_install_python310() {
     echo "Attempting installation with Python 3.10..."
-    uv venv --python 3.10 --python-preference only-managed
+    uv venv --clear --python 3.10 --python-preference only-managed || return 1
     source .venv/bin/activate
     uv pip install "setuptools<=59.8.0" "cython<0.30" pytest pytest-env hypothesis nose
     .venv/bin/python setup.py build_ext --inplace
