@@ -387,7 +387,7 @@ def build_all_bases(
 
 @app.command("build_from_dataset")
 def build_from_dataset(
-    dataset: str = "R2E-Gym/R2E-Gym-Lite",
+    dataset: str = "R2E-Gym/R2E-Gym-Subset",
     split: str = "train",
     registry: str | None = None,
     max_workers: int = 4,

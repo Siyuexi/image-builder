@@ -1,6 +1,6 @@
 # R2E Docker Image Builder
 
-为 [R2E-Gym](https://huggingface.co/datasets/R2E-Gym/R2E-Gym-Lite) 数据集批量构建 Docker sandbox 镜像，并通过 F2P/P2P 验证确保镜像质量。
+为 [R2E-Gym](https://huggingface.co/datasets/R2E-Gym/R2E-Gym-Subset) 数据集批量构建 Docker sandbox 镜像，并通过 F2P/P2P 验证确保镜像质量。
 
 ## 核心概念
 
@@ -56,6 +56,17 @@ uv run python -m r2e_docker validate <image> \
 - `base_{repo}.log` — base 构建失败
 - `commit_{repo}_{hash}.log` — commit 构建失败
 - `validation_{repo}_{hash}.log` — 验证失败（含 F2P/P2P 详细分类）
+
+## 本地测试
+
+用本地docker环境，从头跑通一个 instance 的完整 build + validate 流程（用于debug当前仓库代码逻辑）：
+
+```bash
+# 构建 1 个 base image + commit image 并自动 validation
+uv run python -m r2e_docker build_from_dataset --limit 1
+# 若Success，则说明已经通过F2P/P2P检验
+# 若Fail，则在output/failed_logs中记录失败原因
+```
 
 ## 项目结构
 
