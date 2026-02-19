@@ -1,14 +1,22 @@
-"""Docker image build logic for R2E-Gym environments."""
-
 from __future__ import annotations
 
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
+from typing import Any
 
 from r2e_docker.config import DockerBuildConfig
 from r2e_docker.shell import run_subprocess_shell
+
+_push_semaphore: Any = None
+
+
+def init_push_semaphore(sem: Any) -> None:
+    """Pool initializer: store a shared semaphore for push concurrency control."""
+    global _push_semaphore
+    _push_semaphore = sem
 
 
 def build_base_image(config: DockerBuildConfig, reference_commit: str) -> str:
@@ -33,12 +41,8 @@ def build_base_image(config: DockerBuildConfig, reference_commit: str) -> str:
             capture_output=True,
         )
         if res.returncode == 0:
-            print(f"Base image {base_image_name} already exists, skipping build")
+            # print(f"Base image {base_image_name} already exists, skipping build")
             return base_image_name
-
-    print(
-        f"Building base image {base_image_name} at reference commit {reference_commit}"
-    )
 
     base_dockerfile = config.base_dockerfile
     install_file = config.install_script
@@ -83,7 +87,9 @@ def build_base_image(config: DockerBuildConfig, reference_commit: str) -> str:
                 f"Base image build failed for {config.repo_name.value}\n{log}"
             )
 
-    print(f"Successfully built base image {base_image_name}")
+    if config.push:
+        if not push_image(base_image_name):
+            raise RuntimeError(f"Failed to push base image {base_image_name}")
     return base_image_name
 
 
@@ -188,7 +194,7 @@ def build_commit_image(
             capture_output=True,
         )
         if res.returncode == 0:
-            print(f"Commit image {commit_image} already exists, skipping build")
+            # print(f"Commit image {commit_image} already exists, skipping build")
             return commit_image, None
 
     # Generate Dockerfile if not already present
@@ -198,7 +204,6 @@ def build_commit_image(
         with open(dockerfile_path, "w") as f:
             f.write(dockerfile_content)
 
-    print(f"Building thin commit image for {old_commit_hash}")
     memory_bytes = _parse_memory_limit(config.memory_limit)
     res = run_subprocess_shell(
         f"docker build --memory {memory_bytes} "
@@ -220,25 +225,47 @@ def build_commit_image(
     return commit_image, None
 
 
-def push_image(image_name: str) -> bool:
-    """Push a Docker image to the registry.
+def push_image(image_name: str, max_retries: int = 3) -> bool:
+    """Push a Docker image to the registry with exponential backoff retry.
+
+    Acquires a shared semaphore (if set via init_push_semaphore) to limit the
+    number of concurrent push operations and reduce registry connection pressure.
 
     Args:
         image_name: Full image name including registry and tag.
+        max_retries: Number of push attempts before giving up.
 
     Returns:
-        True on success, False on failure.
+        True on success, False after all retries are exhausted.
     """
-    print(f"Pushing docker image {image_name}")
-    res = subprocess.run(
-        ["docker", "push", image_name],
-        capture_output=True,
-    )
-    if res.returncode != 0:
-        print(f"Failed to push {image_name}: {res.stderr}")
-        return False
-    print(f"Successfully pushed {image_name}")
-    return True
+    last_stderr = b""
+    for attempt in range(max_retries):
+        if _push_semaphore is not None:
+            _push_semaphore.acquire()
+        try:
+            res = subprocess.run(
+                ["docker", "push", image_name],
+                capture_output=True,
+            )
+        finally:
+            if _push_semaphore is not None:
+                _push_semaphore.release()
+
+        if res.returncode == 0:
+            return True
+
+        last_stderr = res.stderr
+        wait = 2**attempt  # 1 s, 2 s, 4 s …
+        if attempt < max_retries - 1:
+            print(
+                f"Failed to push {image_name} "
+                f"(attempt {attempt + 1}/{max_retries}), "
+                f"retrying in {wait}s: {last_stderr}"
+            )
+            time.sleep(wait)
+
+    print(f"Failed to push {image_name} after {max_retries} attempts: {last_stderr}")
+    return False
 
 
 def _parse_memory_limit(limit: str) -> int:

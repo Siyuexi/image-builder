@@ -70,16 +70,28 @@ class DockerBuildConfig(BaseModel):
 
     # -- derived names --------------------------------------------------------
 
+    @staticmethod
+    def _normalize_registry(registry: str) -> str:
+        registry = registry.strip()
+        if not registry:
+            return registry
+        if registry.endswith("/"):
+            return registry
+        return f"{registry}/"
+
     @property
     def base_image_name(self) -> str:
-        return f"{self.registry}{self.repo_name.value}_base:latest"
+        registry = self._normalize_registry(self.registry)
+        return f"{registry}{self.repo_name.value}_base:latest"
 
     def commit_image_name(self, commit_hash: str) -> str:
-        return f"{self.registry}{self.repo_name.value}_final:{commit_hash}"
+        registry = self._normalize_registry(self.registry)
+        return f"{registry}{self.repo_name.value}_final:{commit_hash}"
 
     @property
     def commit_image_name_prefix(self) -> str:
-        return f"{self.registry}{self.repo_name.value}_final"
+        registry = self._normalize_registry(self.registry)
+        return f"{registry}{self.repo_name.value}_final"
 
     # -- file paths (all relative to this package) ----------------------------
 
