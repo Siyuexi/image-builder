@@ -116,11 +116,12 @@ def generate_commit_dockerfile(
         "ARG OLD_COMMIT",
         "WORKDIR /testbed",
         "",
-        "# Base image already contains full git history; just checkout target commit locally",
+        "# Dataset commit_hash is the NEW (fixed) commit. We need its parent,",
+        "# the OLD (buggy) commit, so tests can reveal the bug (F2P pattern).",
         "# Use -fdx to also remove gitignored build artifacts (__config__.py, .so, .c)",
         "# that were generated during the base build and may interfere with old commits.",
         "# Exclude .venv to preserve the base image's virtual environment.",
-        "RUN git reset --hard && git clean -fdx -e .venv && git checkout -f ${OLD_COMMIT}",
+        "RUN git reset --hard && git clean -fdx -e .venv && git checkout -f ${OLD_COMMIT}~1",
     ]
 
     # Some repos need submodule update after checkout
